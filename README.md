@@ -29,7 +29,7 @@ Este proyecto es un analizador de logs de Nginx que procesa los archivos de regi
 1. Clona este repositorio
 2. Asegúrate de tener Docker y Docker Compose instalados
 3. Ejecuta `docker-compose up --build` en la raíz del proyecto
-4. Accede al dashboard en `http://localhost:5000`
+4. Accede al dashboard en `http://localhost:5005`
 
 ## Contribuciones
 
