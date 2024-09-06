@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Logs de Nginx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        .card {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+        .chart-container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .title-text {
+            color: #1f2937; /* Gray-800 */
+        }
+        .value-text {
+            color: #2563eb; /* Blue-600 */
+        }
+        .highlight-text {
+            color: #e11d48; /* Red-600 */
+        }
+        .dashboard-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #ffffff; /* White */
+            background-color: #10b981; /* Green-500 */
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .dashboard-title::before {
+            content: "";
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            background-color: #ffffff; /* White */
+            border-radius: 50%;
+            margin-right: 15px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="dashboard-title">
+            Dashboard de Logs de Nginx
+        </h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-2 title-text">Total de Solicitudes</h2>
+                <p class="text-3xl font-bold value-text">{{ data.total_requests }}</p>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-2 title-text">IPs Únicas</h2>
+                <p class="text-3xl font-bold value-text">{{ data.unique_ips }}</p>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-2 title-text">Tráfico Total</h2>
+                <p class="text-3xl font-bold value-text">{{ '{:.2f}'.format(data.total_traffic / (1024 * 1024)) }} MB</p>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-2 title-text">Hora Pico</h2>
+                <p class="text-3xl font-bold highlight-text">{{ data.peak_hour }}:00</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="chart-container">
+                <h2 class="text-2xl font-semibold mb-4 title-text">Top 5 IPs</h2>
+                <div id="topIpsChart"></div>
+            </div>
+            <div class="chart-container">
+                <h2 class="text-2xl font-semibold mb-4 title-text">Códigos de Estado</h2>
+                <div id="statusCodesChart"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 title-text">Top 5 Rutas</h2>
+                <ul class="space-y-2">
+                    {% for path, count in data.top_paths %}
+                    <li class="flex items-center justify-between">
+                        <span class="font-semibold text-gray-700">{{ path }}</span>
+                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">{{ count }} solicitudes</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 title-text">Top 5 User Agents</h2>
+                <ul class="space-y-2">
+                    {% for ua, count in data.top_user_agents %}
+                    <li class="flex items-center justify-between">
+                        <span class="font-semibold text-gray-700 truncate" title="{{ ua }}">{{ ua[:50] + '...' if ua|length > 50 else ua }}</span>
+                        <span class="bg-green-100 text-green-800 px-2 py-1 rounded">{{ count }} solicitudes</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 title-text">Top 5 Server Names</h2>
+                <ul class="space-y-2">
+                    {% for server_name, count in data.top_server_names %}
+                    <li class="flex items-center justify-between">
+                        <span class="font-semibold text-gray-700 truncate" title="{{ server_name }}">{{ server_name }}</span>
+                        <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded">{{ count }} solicitudes</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Datos para los gráficos
+        const topIpsData = {{ data.top_ips | tojson }};
+        const statusCodesData = {{ data.status_codes | tojson }};
+
+        // Descripciones para los códigos de estado
+        const statusCodeDescriptions = {
+            "200": "OK - La solicitud ha tenido éxito.",
+            "201": "Created - La solicitud ha tenido éxito y se ha creado un nuevo recurso.",
+            "202": "Accepted - La solicitud ha sido aceptada para su procesamiento, pero aún no se ha completado.",
+            "204": "No Content - La solicitud ha tenido éxito, pero no hay contenido para enviar.",
+            "301": "Moved Permanently - La URL solicitada ha sido movida de forma permanente a una nueva ubicación.",
+            "302": "Found - La URL solicitada ha sido temporalmente movida a una nueva ubicación.",
+            "400": "Bad Request - La solicitud no se puede procesar debido a un error del cliente.",
+            "401": "Unauthorized - Se requiere autenticación para acceder al recurso.",
+            "403": "Forbidden - El acceso al recurso está prohibido.",
+            "404": "Not Found - El recurso solicitado no se pudo encontrar.",
+            "499": "Client Closed Request - El cliente cerró la conexión antes de que el servidor pudiera responder.",
+            "500": "Internal Server Error - Error en el servidor al procesar la solicitud.",
+            "502": "Bad Gateway - El servidor actuó como una puerta de enlace y recibió una respuesta inválida.",
+            "503": "Service Unavailable - El servidor no está disponible temporalmente."
+        };
+
+        // Colores para los códigos de estado
+        const statusCodeColors = {
+            "200": "#4CAF50", // Green
+            "201": "#8BC34A", // Light Green
+            "202": "#CDDC39", // Lime
+            "204": "#E91E63", // Pink
+            "301": "#2196F3", // Blue
+            "302": "#FFC107", // Amber
+            "400": "#00BCD4", // Light Blue
+            "401": "#9C27B0", // Purple
+            "403": "#F44336", // Red
+            "404": "#FF9800", // Orange
+            "499": "#FF5722", // Deep Orange
+            "500": "#795548", // Brown
+            "502": "#3F51B5", // Indigo
+            "503": "#9E9E9E"  // Grey
+        };
+
+        // Gráfico de Top 5 IPs
+        new ApexCharts(document.querySelector("#topIpsChart"), {
+            series: [{
+                data: topIpsData.map(item => item[1])
+            }],
+            chart: {
+                type: 'bar',
+                height: 350
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 8,
+                    horizontal: true,
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            xaxis: {
+                categories: topIpsData.map(item => item[0]),
+            },
+            colors: ['#4CAF50']
+        }).render();
+
+        // Gráfico de Códigos de Esta
+        new ApexCharts(document.querySelector("#statusCodesChart"), {
+            series: Object.values(statusCodesData),
+            chart: {
+                type: 'pie',
+                height: 350
+            },
+            labels: Object.keys(statusCodesData),
+            colors: Object.keys(statusCodeColors).map(code => statusCodeColors[code]),
+            legend: {
+                show: true
+            },
+            tooltip: {
+                y: {
+                    formatter: function (value, { seriesIndex }) {
+                        const statusCode = Object.keys(statusCodesData)[seriesIndex];
+                        return `${value} solicitudes (${statusCodeDescriptions[statusCode] || 'Descripción no disponible'})`;
+                    }
+                }
+            }
+        }).render();
+    </script>
+</body>
+</html>

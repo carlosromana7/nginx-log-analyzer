@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  nginx-log-analyzer:
+    build: .
+    ports:
+      - "5005:5000"
+    volumes:
+      - /var/log/nginx:/var/log/nginx:ro
+      - ./app:/app
+    restart: always
